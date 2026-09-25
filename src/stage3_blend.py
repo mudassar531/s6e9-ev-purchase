@@ -88,18 +88,26 @@ print('Rank blend OOF AUC:', roc_auc_score(target, blend_oof_rank))
 print('\nEqual-weight prob blend AUC:', roc_auc_score(target, oof_mat.mean(axis=1)))
 print('Equal-weight rank blend AUC:', roc_auc_score(target, rank_mat.mean(axis=1)))
 
-# pick the best strategy automatically
+# BUGFIX (previously): this block always submitted the linear-probability blend
+# regardless of which strategy (linear vs rank) actually won on OOF. The historic
+# 0.94638 submission was therefore a probability blend, not a rank blend as labeled.
+# See reports/historic_stage3_weights.json for the reconstructed record of that run.
+# Now: compute and save BOTH correctly, using the right test-side transform for each.
 test_mat = np.vstack(tests).T
-candidates = {
-    'linear_opt': (roc_auc_score(target, blend_oof), test_mat @ w),
-    'rank_opt': (roc_auc_score(target, blend_oof_rank), None),  # need rank of test too
-}
-best_name = max(candidates, key=lambda k: candidates[k][0])
-print(f'\nBest strategy: {best_name} with OOF {candidates[best_name][0]:.5f}')
+test_rank_mat = np.apply_along_axis(rankdata, 0, test_mat) / test_mat.shape[0]
+
+prob_auc = roc_auc_score(target, blend_oof)
+rank_auc = roc_auc_score(target, blend_oof_rank)
+print(f'\nprobability blend OOF={prob_auc:.5f}  |  rank blend OOF={rank_auc:.5f}')
 
 np.save('models/blend_oof.npy', blend_oof)
 np.save('models/blend_weights.npy', w)
-final_test = test_mat @ w
-sub = pd.DataFrame({'id': test['id'], 'Will_Buy_EV': final_test})
-sub.to_csv('submissions/stage3_blend.csv', index=False)
-print('\nSaved submissions/stage3_blend.csv')
+np.save('models/blend_rank_weights.npy', wr)
+
+sub_prob = pd.DataFrame({'id': test['id'], 'Will_Buy_EV': test_mat @ w})
+sub_prob.to_csv('submissions/stage3_probability_blend.csv', index=False)
+print('Saved submissions/stage3_probability_blend.csv')
+
+sub_rank = pd.DataFrame({'id': test['id'], 'Will_Buy_EV': test_rank_mat @ wr})
+sub_rank.to_csv('submissions/stage3_rank_blend.csv', index=False)
+print('Saved submissions/stage3_rank_blend.csv')

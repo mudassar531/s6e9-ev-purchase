@@ -65,9 +65,14 @@ print('Equal-weight rank blend OOF AUC:', roc_auc_score(target, rank_mat.mean(ax
 test_ranks = np.apply_along_axis(rankdata, 0, test_mat_raw) / test_mat_raw.shape[0]
 core_test_blend = test_ranks @ w
 
-# ---------------- TEST-ONLY PUBLIC MEMBERS (unvalidated -> small fixed weight pool) ----------------
-extra_test_files = [
-    'data/public_kernels/amanatar_s6e9-samart-sota-meta-blend-lb-0-94656-champion/submission.csv',
+# ---------------- TEST-ONLY / UNVALIDATED PUBLIC MEMBERS (no OOF -> never in the primary ensemble) ----------------
+# EXCLUDED: data/public_kernels/amanatar_s6e9-samart-sota-meta-blend-lb-0-94656-champion/submission.csv
+#   Its kernel log showed "Applying Exact Public Split Calibration Swaps" plus hardcoded
+#   per-row score offsets ("Income Dead Zone", "Commute Extreme" etc.) tuned to the public
+#   test split specifically -> leaderboard probing, not real signal. Won't generalize to the
+#   private leaderboard. Local copy of its output was deleted; this note documents why it's
+#   gone rather than silently vanishing. Never re-add it to a serious ensemble.
+TEST_ONLY_UNVALIDATED_MODELS = [
     'data/public_kernels/vinay24baghira_s6e9-rank-averaging-ensemble-0-946-lb/submission.csv',
     'data/public_kernels/lamhuy8904_s6e9-94-6-transformer-and-gbdt-ensemble/submission.csv',
     'data/public_kernels/najiama_s6e9-electric-vehicle-oof-cv-0-94618-lb-0-94633/submission.csv',
@@ -77,7 +82,7 @@ extra_test_files = [
 ]
 extra_ranks = []
 extra_names = []
-for f in extra_test_files:
+for f in TEST_ONLY_UNVALIDATED_MODELS:
     try:
         df = pd.read_csv(f).set_index('id').reindex(test_id_order)
         col = df.columns[0]
@@ -86,20 +91,18 @@ for f in extra_test_files:
     except Exception as e:
         print(f'skip {f}: {e}')
 
-extra_mat = np.vstack(extra_ranks).T if extra_ranks else None
-print(f'\n{len(extra_names)} extra unvalidated test-only members included at low weight')
+# ---- PRIMARY submission: OOF-validated models ONLY. This is the private-LB candidate. ----
+sub_primary = pd.DataFrame({'id': test_id_order, 'Will_Buy_EV': core_test_blend})
+sub_primary.to_csv('submissions/stage4_primary_oof_validated.csv', index=False)
+print(f'\nSaved submissions/stage4_primary_oof_validated.csv (OOF={roc_auc_score(target, blend_oof):.5f}) - PRIMARY candidate, OOF-validated members only')
 
-# final: core (OOF-validated, high trust) gets 75%, unvalidated public pool gets 25% (equal-avg within pool)
-import os
-CORE_WEIGHT = float(os.environ.get('CORE_WEIGHT', 0.75))
-if extra_mat is not None:
+# ---- Separate, explicitly-labeled HIGH-RISK submission mixing in unvalidated public predictions ----
+if extra_ranks:
+    extra_mat = np.vstack(extra_ranks).T
     extra_avg = extra_mat.mean(axis=1)
-    final_test_score = CORE_WEIGHT * rankdata(core_test_blend) / len(core_test_blend) + (1 - CORE_WEIGHT) * extra_avg
-else:
-    final_test_score = core_test_blend
-
-sub = pd.DataFrame({'id': test_id_order, 'Will_Buy_EV': final_test_score})
-out_path = f'submissions/stage4_final_blend_core{CORE_WEIGHT}.csv'
-sub.to_csv(out_path, index=False)
-print(f'\nSaved {out_path}')
+    HIGH_RISK_WEIGHT = 0.25
+    high_risk_score = (1 - HIGH_RISK_WEIGHT) * (rankdata(core_test_blend) / len(core_test_blend)) + HIGH_RISK_WEIGHT * extra_avg
+    sub_risk = pd.DataFrame({'id': test_id_order, 'Will_Buy_EV': high_risk_score})
+    sub_risk.to_csv('submissions/high_risk/stage4_with_unvalidated_pool.csv', index=False)
+    print(f'Saved submissions/high_risk/stage4_with_unvalidated_pool.csv - NOT the primary candidate, no OOF backing for {len(extra_names)} pooled members: {extra_names}')
 print(sub['Will_Buy_EV'].describe())

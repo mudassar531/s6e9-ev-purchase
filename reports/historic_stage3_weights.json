@@ -1,0 +1,18 @@
+{
+  "submission_file": "historic_stage3_blend_0.94638.csv",
+  "public_lb_score": 0.94638,
+  "oof_auc_reported": 0.94622,
+  "actual_strategy_used": "linear probability blend (NOT rank blend, despite being labeled rank-blend - this was the bug)",
+  "member_names_in_order": [
+    "lgb",
+    "xgb",
+    "pub_najiama_xgb",
+    "pub_aryankaisth_hist"
+  ],
+  "weights": [
+    0.08566827531236322,
+    0.12455861640560673,
+    0.6347386463934642,
+    0.1550344618885659
+  ]
+}
