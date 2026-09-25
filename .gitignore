@@ -1,0 +1,15 @@
+.venv/
+data/*.csv
+data/*.zip
+data/original/*.csv
+data/fingerprints/*.csv
+data/public_blends/*.csv
+data/public_kernels/
+data/lb/
+data/train_features.parquet
+data/test_features.parquet
+models/*.npy
+submissions/*.csv
+__pycache__/
+*.pyc
+.DS_Store
